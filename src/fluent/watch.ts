@@ -191,7 +191,7 @@ export class Watcher<T extends GenericClass> {
     }
 
     // Enable watch bookmarks
-    url.searchParams.set("allowWatchBookmarks", "true");
+    // url.searchParams.set("allowWatchBookmarks", "true");
 
     // Add the abort signal to the request options
     opts.signal = this.#abortController.signal;
@@ -252,9 +252,11 @@ export class Watcher<T extends GenericClass> {
 
             // If the event is a bookmark, emit the event and skip the callback
             if (phase === WatchPhase.Bookmark) {
-              this.#events.emit(WatchEvent.BOOKMARK, payload);
+              // this.#events.emit(WatchEvent.BOOKMARK, payload);
+              console.log('kfc: got bookmark event, skipping')
             } else {
               this.#events.emit(WatchEvent.DATA, payload, phase);
+              console.log('kcf: got data event: ', payload, phase)
 
               // Call the callback function with the parsed payload
               await this.#callback(payload, phase as WatchPhase);
@@ -263,6 +265,7 @@ export class Watcher<T extends GenericClass> {
             // Update the resource version if the callback was successful
             this.#setResourceVersion(payload.metadata.resourceVersion);
           } catch (err) {
+            console.log('kcf: caught error: ', err)
             if (err.name === "TooOld") {
               // Prevent any body events from firing
               body.removeAllListeners();
