@@ -162,10 +162,12 @@ class Watcher {
         // url.searchParams.set("allowWatchBookmarks", "true");
         // Add the abort signal to the request options
         opts.signal = this.#abortController.signal;
+        console.log('kfc: buildURL:', url, opts);
         return { opts, url };
     };
     /** Run the watch. */
     #runner = async () => {
+        console.log('kfc: runner');
         try {
             // Build the URL and request options
             const { opts, url } = await this.#buildURL();
@@ -180,7 +182,7 @@ class Watcher {
             // Reset the pending reconnect flag
             this.#pendingReconnect = false;
             // Reset the resync timer
-            void this.#scheduleResync();
+            this.#scheduleResync();
             // If the request is successful, start listening for events
             if (response.ok) {
                 this.#events.emit(WatchEvent.CONNECT);
@@ -189,10 +191,11 @@ class Watcher {
                 this.#retryCount = 0;
                 // Listen for events and call the callback function
                 this.#stream.on("data", async (line) => {
+                    console.log('kfc: stream.on.data');
                     try {
                         // Parse the event payload
                         const { object: payload, type: phase } = JSON.parse(line);
-                        void this.#scheduleResync();
+                        this.#scheduleResync();
                         // If the watch is too old, remove the resourceVersion and reload the watch
                         if (phase === types_1.WatchPhase.Error && payload.code === 410) {
                             throw {
@@ -202,12 +205,12 @@ class Watcher {
                         }
                         // If the event is a bookmark, emit the event and skip the callback
                         if (phase === types_1.WatchPhase.Bookmark) {
-                            // this.#events.emit(WatchEvent.BOOKMARK, payload);
-                            console.log('kfc: got bookmark event, skipping');
+                            this.#events.emit(WatchEvent.BOOKMARK, payload);
+                            console.log('kfc: got bookmark event: ', payload, phase);
                         }
                         else {
                             this.#events.emit(WatchEvent.DATA, payload, phase);
-                            console.log('kcf: got data event: ', payload, phase);
+                            console.log('kfc: got data event: ', payload, phase);
                             // Call the callback function with the parsed payload
                             await this.#callback(payload, phase);
                         }
@@ -215,7 +218,7 @@ class Watcher {
                         this.#setResourceVersion(payload.metadata.resourceVersion);
                     }
                     catch (err) {
-                        console.log('kcf: caught error: ', err);
+                        console.log('kfc: caught error: ', err);
                         if (err.name === "TooOld") {
                             // Prevent any body events from firing
                             body.removeAllListeners();
@@ -223,6 +226,7 @@ class Watcher {
                             void this.#errHandler(err);
                             return;
                         }
+                        console.log('kfc: data_error: ', err);
                         this.#events.emit(WatchEvent.DATA_ERROR, err);
                     }
                 });
@@ -246,14 +250,20 @@ class Watcher {
      *
      * @returns the error handler
      */
-    #resync = () => this.#errHandler({
-        name: "Resync",
-        message: "Resync triggered by resyncIntervalSec",
-    });
+    #resync = () => {
+        console.log('kfc: resync');
+        this.#errHandler({
+            name: "Resync",
+            message: "Resync triggered by resyncIntervalSec",
+        });
+    };
     /** Clear the resync timer and schedule a new one. */
-    #scheduleResync = async () => {
+    #scheduleResync = () => {
+        console.log('kfc: scheduleResync');
+        console.log('kfc: clearing resyncTimer: ', this.#resyncTimer);
         clearTimeout(this.#resyncTimer);
         this.#resyncTimer = setTimeout(this.#resync, this.#watchCfg.resyncIntervalSec * 1000);
+        console.log('kfc: new resyncTimer: ', this.#resyncTimer);
     };
     /**
      * Update the resource version.
@@ -261,6 +271,7 @@ class Watcher {
      * @param resourceVersion - the new resource version
      */
     #setResourceVersion = (resourceVersion) => {
+        console.log('kfc: setResourceVersion: ', resourceVersion);
         this.#watchCfg.resourceVersion = resourceVersion;
         this.#events.emit(WatchEvent.RESOURCE_VERSION, resourceVersion);
     };
@@ -270,6 +281,7 @@ class Watcher {
      * @param err - the error that occurred
      */
     #reconnect = async (err) => {
+        console.log('kfc: reconnect: ', err);
         // If there are more attempts, retry the watch (undefined is unlimited retries)
         if (this.#watchCfg.retryMax === undefined || this.#watchCfg.retryMax > this.#retryCount) {
             // Sleep for the specified delay, but check every 500ms if the watch has been aborted
@@ -305,6 +317,7 @@ class Watcher {
      * @param err - the error that occurred
      */
     #errHandler = async (err) => {
+        console.log('kfc: errHandler: ', err);
         switch (err.name) {
             case "AbortError":
                 clearTimeout(this.#resyncTimer);
@@ -327,6 +340,7 @@ class Watcher {
     };
     /** Cleanup the stream and listeners. */
     #cleanup = () => {
+        console.log('kfc: cleanup');
         if (this.#stream) {
             this.#stream.removeAllListeners();
             this.#stream.destroy();
